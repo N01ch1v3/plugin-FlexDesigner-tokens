@@ -1,0 +1,140 @@
+{
+    "name": "AI Tokens",
+    "uuid": "com.arishow.aitokens",
+    "version": "1.0.0",
+    "author": "ari-show",
+    "entry": "backend/plugin.cjs",
+    "description": "Show remaining Claude Code and Codex usage quota on your Flexbar",
+    "repo": "https://github.com/ari-show/plugin-FlexDesigner-tokens",
+    "sdk": {
+        "version": "1.0.0"
+    },
+    "software": {
+        "minimumVersion": "2.0.1"
+    },
+    "os": [
+        {
+            "platform": "mac",
+            "minimumVersion": "10.15"
+        },
+        {
+            "platform": "windows",
+            "minimumVersion": "10"
+        },
+        {
+            "platform": "linux",
+            "minimumVersion": "20.04"
+        }
+    ],
+    "device": [
+        {
+            "name": "flexbar",
+            "version": "1.0.0"
+        }
+    ],
+    "configPage": "configPage",
+    "keyLibrary": {
+        "title": "$PluginName",
+        "style": {
+            "icon": "mdi mdi-gauge"
+        },
+        "children": [
+            {
+                "title": "$Claude.Title",
+                "tip": "$Claude.Tip",
+                "cid": "com.arishow.aitokens.claude",
+                "config": {
+                    "keyType": "default",
+                    "clickable": true,
+                    "platform": [
+                        "windows",
+                        "mac",
+                        "linux"
+                    ]
+                },
+                "style": {
+                    "icon": "mdi mdi-robot-outline",
+                    "width": 240
+                },
+                "data": {
+                    "intervalMs": 120000
+                }
+            },
+            {
+                "title": "$Codex.Title",
+                "tip": "$Codex.Tip",
+                "cid": "com.arishow.aitokens.codex",
+                "config": {
+                    "keyType": "default",
+                    "clickable": true,
+                    "platform": [
+                        "windows",
+                        "mac",
+                        "linux"
+                    ]
+                },
+                "style": {
+                    "icon": "mdi mdi-code-braces-box",
+                    "width": 240
+                },
+                "data": {
+                    "intervalMs": 30000
+                }
+            }
+        ]
+    },
+    "local": {
+        "en": {
+            "PluginName": "AI Tokens",
+            "Claude": {
+                "Title": "Claude Usage",
+                "Tip": "Remaining Claude Code quota (5-hour and weekly windows). Click to refresh."
+            },
+            "Codex": {
+                "Title": "Codex Usage",
+                "Tip": "Remaining Codex CLI quota, read from local session logs. Click to refresh."
+            },
+            "Config": {
+                "Interval": "Refresh interval (seconds)",
+                "IntervalHint": "Claude's usage API is rate limited; 60 seconds or more is recommended.",
+                "Note": "Claude usage is read from Anthropic's OAuth usage endpoint using your local Claude Code login. Codex usage is read from local session files. Nothing is sent anywhere else."
+            },
+            "Relogin": {
+                "Title": "Claude re-login (fallback)",
+                "Subtitle": "Claude Code's own login is refreshed automatically. Only use this if the key shows a login error.",
+                "Button": "Log in with browser",
+                "CodeLabel": "Paste the code from the Anthropic page",
+                "CodeHint": "After logging in, the page shows a code like abcd#1234 — paste the whole thing here.",
+                "StatusAwaitingCode": "Browser opened. Log in, then paste the code shown on the page above.",
+                "StatusSuccess": "Logged in. The Claude key will refresh shortly.",
+                "StatusError": "Login failed:"
+            }
+        },
+        "ja": {
+            "PluginName": "AI トークン",
+            "Claude": {
+                "Title": "Claude 使用量",
+                "Tip": "Claude Code の残りクォータ（5時間枠・週次枠）。クリックで更新します。"
+            },
+            "Codex": {
+                "Title": "Codex 使用量",
+                "Tip": "Codex CLI の残りクォータ。ローカルのセッションログから読み取ります。クリックで更新します。"
+            },
+            "Config": {
+                "Interval": "更新間隔（秒）",
+                "IntervalHint": "Claude の使用量 API はレート制限が厳しいため、60秒以上を推奨します。",
+                "Note": "Claude の使用量はローカルの Claude Code ログインを使い Anthropic の OAuth エンドポイントから取得します。Codex はローカルのセッションファイルから読み取ります。外部への送信は行いません。"
+            },
+            "Relogin": {
+                "Title": "Claude 再ログイン（フォールバック）",
+                "Subtitle": "通常は Claude Code のログインが自動的に更新されます。キーがログインエラーを表示した時だけ使ってください。",
+                "Button": "ブラウザでログイン",
+                "CodeLabel": "Anthropic のページに表示されたコードを貼り付け",
+                "CodeHint": "ログイン後のページに abcd#1234 のようなコードが表示されるので、そのまま全部貼り付けてください。",
+                "StatusAwaitingCode": "ブラウザを開きました。ログイン後、上のページに表示されたコードを貼り付けてください。",
+                "StatusSuccess": "ログインしました。まもなく Claude キーが更新されます。",
+                "StatusError": "ログインに失敗しました:"
+            }
+        }
+    }
+}

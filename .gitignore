@@ -1,0 +1,18 @@
+node_modules
+logs
+.vscode
+.env
+# package-lock.json
+*.flexplugin
+
+# Build output
+com.arishow.aitokens.plugin/backend
+
+# Runtime config (may contain user settings)
+com.arishow.aitokens.plugin/config.json
+
+# Nix / direnv
+.direnv
+.npm-global
+result
+result-*

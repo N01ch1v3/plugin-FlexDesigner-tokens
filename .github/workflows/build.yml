@@ -1,0 +1,123 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Run tests
+        run: npm test
+
+  build:
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Install FlexCLI
+        run: npm install -g @eniac/flexcli
+
+      - name: Build plugin
+        run: npm run build
+
+      - name: Validate plugin
+        run: npm run plugin:validate
+
+      - name: Pack plugin
+        run: npm run plugin:pack
+
+      - name: Rename plugin for platform
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # FlexDesigner expects <uuid>.<os>.<arch>.flexplugin and picks the
+          # matching backend automatically at install time.
+          case "${{ matrix.os }}" in
+            windows-latest) OS_NAME="win32" ;;
+            macos-latest)   OS_NAME="darwin" ;;
+            ubuntu-latest)  OS_NAME="linux" ;;
+            *) echo "::error::Unsupported OS: ${{ matrix.os }}"; exit 1 ;;
+          esac
+
+          ARCH=$(echo "${{ runner.arch }}" | tr '[:upper:]' '[:lower:]')
+          SOURCE="com.arishow.aitokens.flexplugin"
+          TARGET="com.arishow.aitokens.${OS_NAME}.${ARCH}.flexplugin"
+
+          if [ ! -f "$SOURCE" ]; then
+            echo "::error::$SOURCE not found"
+            ls -la
+            exit 1
+          fi
+
+          mv "$SOURCE" "$TARGET"
+          echo "Packed $TARGET"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plugin-${{ matrix.os }}-${{ runner.arch }}
+          path: com.arishow.aitokens.*.*.flexplugin
+          compression-level: 0
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: ./artifacts
+          merge-multiple: true
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-path: artifacts/*.flexplugin
+
+      - name: Create Release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          files: artifacts/*.flexplugin
+          draft: false
+          prerelease: false
+          generate_release_notes: true

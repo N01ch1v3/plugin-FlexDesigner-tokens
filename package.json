@@ -1,0 +1,56 @@
+{
+  "name": "flexdesigner-ai-tokens",
+  "version": "1.0.0",
+  "description": "FlexDesigner plugin showing remaining Claude Code and Codex usage quota on a Flexbar",
+  "license": "MIT",
+  "author": "ari-show",
+  "homepage": "https://github.com/ari-show/plugin-FlexDesigner-tokens#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ari-show/plugin-FlexDesigner-tokens.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ari-show/plugin-FlexDesigner-tokens/issues"
+  },
+  "keywords": [
+    "flexdesigner",
+    "flexbar",
+    "claude-code",
+    "codex-cli",
+    "usage",
+    "rate-limit",
+    "plugin"
+  ],
+  "type": "commonjs",
+  "scripts": {
+    "build": "rollup -c",
+    "test": "node --test test/",
+    "dev": "npm-run-all plugin:unlink plugin:link -p plugin:watch plugin:debug",
+    "plugin:watch": "rollup -c -w --watch.onEnd=\"npm run plugin:restart\"",
+    "plugin:unlink": "flexcli plugin unlink --uuid com.arishow.aitokens --silent",
+    "plugin:link": "flexcli plugin link --path com.arishow.aitokens.plugin --uuid com.arishow.aitokens --start false",
+    "plugin:restart": "flexcli plugin restart --uuid=com.arishow.aitokens",
+    "plugin:debug": "flexcli plugin debug --uuid=com.arishow.aitokens",
+    "plugin:validate": "flexcli plugin validate --path com.arishow.aitokens.plugin",
+    "plugin:pack": "flexcli plugin pack --path com.arishow.aitokens.plugin",
+    "plugin:install": "flexcli plugin install --path ./com.arishow.aitokens.flexplugin --force"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.0",
+    "@rollup/plugin-json": "^6.1.0",
+    "@rollup/plugin-node-resolve": "^15.2.2",
+    "@rollup/plugin-terser": "^1.0.0",
+    "glob": "^10.3.10",
+    "npm-run-all": "^4.1.5",
+    "rollup": "^4.0.2",
+    "rollup-plugin-copy": "^3.5.0"
+  },
+  "dependencies": {
+    "@eniac/flexcli": "^1.0.7",
+    "@eniac/flexdesigner": "^1.0.7",
+    "@napi-rs/canvas": "^0.1.52"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
