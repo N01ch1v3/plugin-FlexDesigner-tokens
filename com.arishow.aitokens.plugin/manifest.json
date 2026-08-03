@@ -2,10 +2,10 @@
     "name": "AI Tokens",
     "uuid": "com.arishow.aitokens",
     "version": "1.0.0",
-    "author": "ShotaArima",
+    "author": "ari-show",
     "entry": "backend/plugin.cjs",
     "description": "Show remaining Claude Code and Codex usage quota on your Flexbar",
-    "repo": "https://github.com/ShotaArima/plugin-FlexDesigner-tokens",
+    "repo": "https://github.com/ari-show/plugin-FlexDesigner-tokens",
     "sdk": {
         "version": "1.0.0"
     },

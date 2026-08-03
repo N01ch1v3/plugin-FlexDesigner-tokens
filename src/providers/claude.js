@@ -212,4 +212,4 @@ async function getUsage(opts = {}) {
   return data;
 }
 
-module.exports = { getUsage, MIN_REFRESH_MS, ReauthRequiredError: claudeAuth.ReauthRequiredError };
+module.exports = { getUsage, MIN_REFRESH_MS, ReauthRequiredError: claudeAuth.ReauthRequiredError, normaliseWindow };

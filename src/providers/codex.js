@@ -69,9 +69,8 @@ async function readTailLines(file) {
   }
 }
 
-/** Pulls the last token_count event carrying rate limits out of a rollout. */
-async function lastRateLimits(file) {
-  const lines = await readTailLines(file);
+/** Pure parsing: finds the last token_count event carrying rate limits in a list of JSONL lines. */
+function extractLastRateLimits(lines) {
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i].trim();
     if (!line || !line.includes("token_count")) continue;
@@ -86,6 +85,12 @@ async function lastRateLimits(file) {
     if (payload.rate_limits) return payload;
   }
   return null;
+}
+
+/** Pulls the last token_count event carrying rate limits out of a rollout. */
+async function lastRateLimits(file) {
+  const lines = await readTailLines(file);
+  return extractLastRateLimits(lines);
 }
 
 /** Normalises one rate limit window. `used_percent` is percent USED. */
@@ -165,4 +170,4 @@ async function getUsage(opts = {}) {
   return data;
 }
 
-module.exports = { getUsage, MIN_REFRESH_MS };
+module.exports = { getUsage, MIN_REFRESH_MS, normaliseWindow, extractLastRateLimits };

@@ -1,133 +1,139 @@
-# AI Tokens — FlexDesigner プラグイン
+English | [日本語](README.ja.md)
 
-Claude Code と Codex CLI の**残りクォータ**を Flexbar のキー上に常時表示する FlexDesigner プラグインです。
+# AI Tokens — FlexDesigner Plugin
+
+A FlexDesigner plugin that keeps your **remaining Claude Code and Codex CLI quota** visible on a Flexbar key at all times.
 
 ![Claude key](docs/images/key-claude.png)
 ![Codex key](docs/images/key-codex.png)
 
-- **Claude キー** — 5時間枠の残量を大きく表示。週次枠と追加クレジットをメーターで併記
-- **Codex キー** — 主レート制限枠の残量を表示。コンテキスト使用量をメーターで併記
-- 残量に応じて色が変化（緑 → 黄 → オレンジ → 赤）。**色だけに頼らず数値も常に表示**します
-- キーを**クリックすると即時更新**
-- リセットまでの残り時間を右上に表示
+- **Claude key** — shows remaining 5-hour session quota prominently, with weekly quota and extra usage credits as secondary meters
+- **Codex key** — shows remaining primary rate-limit quota, with context window usage as a secondary meter
+- Color shifts with remaining quota (green → yellow → orange → red). **Numbers are always shown, never color alone**
+- **Click a key to refresh it immediately**
+- Time until reset is shown in the top-right corner
 
 ---
 
-## ⚠️ 重要: Claude 側は非公式 API を使用しています
+## ⚠️ Important: Claude support uses an unofficial API
 
-このプラグインは Claude の残量取得に `https://api.anthropic.com/api/oauth/usage` を使用します。
+This plugin reads remaining Claude quota from `https://api.anthropic.com/api/oauth/usage`.
 
-- これは **Anthropic の公開 API リファレンスに記載されていないエンドポイント**です。Claude Code 自身が `/usage` の表示に使っているものと同じで、コミュニティによって発見されました
-- 認証には、通常は**お使いの Claude Code がログイン時に保存した OAuth トークンをそのまま利用**します。トークンが失効している場合は `refreshToken` を使ってサイレントに更新し、Claude Code の資格情報に書き戻します（案A）
-  - このリフレッシュ処理が使う `https://console.anthropic.com/v1/oauth/token` も同様に**非公開のエンドポイント**です
-  - `refreshToken` 自体が失効している場合に限り、設定画面から Anthropic のブラウザ認可フローでログインし直せます（案B）。この場合のトークンは**プラグイン専用に保存**し、Claude Code 本体の資格情報には一切書き込みません（別デバイスからログインしたのと同じ扱いです）
-- リクエストには Claude Code と互換の `User-Agent`（`claude-code/<バージョン>`）を付与します。このエンドポイントが Claude Code クライアントからのアクセスを前提としているためで、バージョンはローカルの `claude --version` から取得します
-- 行うのは**自分のアカウントの使用量情報の読み取りのみ**です。トークンの消費・課金・アカウント設定の変更は一切行いません
-- **Anthropic の仕様変更により予告なく壊れる可能性があります**
-- レート制限が厳しいため、更新間隔は **60秒以上**を強く推奨します（デフォルト120秒）
-- 非公式な手段である以上、Anthropic の利用規約との整合を保証するものではありません。**利用は自己責任**でお願いします。懸念がある場合は Claude キーを使わず、Codex キーのみの利用も可能です
+- This endpoint is **not documented in Anthropic's public API reference**. It's the same one Claude Code itself uses to render `/usage`, discovered by the community
+- Authentication normally **reuses the OAuth token your local Claude Code login already saved**. If that token has expired, it is silently refreshed using `refreshToken` and written back to Claude Code's own credentials (Plan A)
+  - The refresh request itself, to `https://console.anthropic.com/v1/oauth/token`, is likewise an **undocumented endpoint**
+  - Only if `refreshToken` itself has expired can you re-authenticate through Anthropic's browser authorization flow from the settings page (Plan B, a fallback). Tokens from this flow are **stored separately for the plugin only** and never written to Claude Code's own credentials (equivalent to logging in from a separate device)
+- Requests carry a Claude-Code-compatible `User-Agent` (`claude-code/<version>`), since the endpoint expects to be called by the Claude Code client; the version is read from the local `claude --version`
+- The plugin only **reads your own account's usage information**. It never consumes tokens, incurs charges, or changes account settings
+- **This may break without notice due to Anthropic changes to the endpoint**
+- The endpoint rate-limits aggressively; a refresh interval of **60 seconds or more** is strongly recommended (default: 120 seconds)
+- Because this relies on an unofficial mechanism, there is no guarantee it stays compliant with Anthropic's Terms of Service. **Use at your own risk.** If you're concerned, you can use the Codex key only and skip the Claude key entirely
+- **If Anthropic requests it, the Claude key's functionality may be disabled or changed without notice**
 
-**なぜこの方法しかないのか:** `~/.claude/projects/**/*.jsonl` に記録されるのは「消費した」トークン数のみで、レート制限枠やリセット時刻の情報が一切含まれません。そのため、正確な**残量**を知る手段が他に存在しません。
+**Why there's no other way:** `~/.claude/projects/**/*.jsonl` only records tokens **consumed**, with no information about rate-limit windows or reset times. There is no other way to learn the actual **remaining** quota.
 
-一方 **Codex 側はローカルファイルの読み取りのみ**で、認証もネットワークアクセスも不要です。
+**The Codex side, by contrast, only reads local files** — no authentication or network access required.
 
-### トークンの取り扱い
+### How tokens are handled
 
-- Claude の OAuth トークンは macOS では **Keychain**（`Claude Code-credentials`）、Linux / Windows では `~/.claude/.credentials.json` から読み取ります
-- 案B（設定画面からの再ログイン）で発行されたトークンは、Claude Code とは別に、macOS では **Keychain の別アイテム**（`FlexDesigner AI Tokens-credentials`）、Linux / Windows では専用ファイル（`~/.claude/flexdesigner-ai-tokens.credentials.json`、パーミッション 600）に保存します
-- トークンは **Anthropic への認証にのみ使用**し、ログ・設定ファイル・キーの描画内容には一切出力しません
-- **第三者への送信は行いません**
+- Claude's OAuth token is read from the macOS **Keychain** (`Claude Code-credentials`), or from `~/.claude/.credentials.json` on Linux/Windows
+- Tokens issued via Plan B (re-login from the settings page) are stored separately from Claude Code's own credentials: in a **separate Keychain item** (`FlexDesigner AI Tokens-credentials`) on macOS, or a dedicated file (`~/.claude/flexdesigner-ai-tokens.credentials.json`, mode 600) on Linux/Windows
+- Tokens are **used only to authenticate to Anthropic** and are never written to logs, config files, or key rendering output
+- **Nothing is ever sent to any third party**
 
 ---
 
-## 動作環境
+## Requirements
 
-このプラグインは、[Claude Code](https://docs.anthropic.com/ja/docs/claude-code/overview) / [Codex CLI](https://github.com/openai/codex) が**同じマシンの CLI 環境にインストール済みであることを前提**としています。プラグイン自身はどちらのサービスにもログインせず、各 CLI が残した認証情報やセッションログを読み取るだけです。
+This plugin assumes [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) / [Codex CLI](https://github.com/openai/codex) are **already installed in the CLI environment of the same machine**. The plugin itself never logs in to either service — it only reads the credentials and session logs each CLI leaves behind.
 
-| 要件 | 条件 |
+| Requirement | Condition |
 |---|---|
-| FlexDesigner | 2.0.1 以降 |
-| Node.js | 20 以降 |
-| Claude Code | インストール済みで、`claude` でログイン済みであること（Claude キーを使う場合） |
-| Codex CLI | インストール済みで、1回以上セッションを実行済みであること（Codex キーを使う場合） |
+| FlexDesigner | 2.0.1 or later |
+| Node.js | 20 or later |
+| Claude Code | Installed and logged in via `claude` (if using the Claude key) |
+| Codex CLI | Installed with at least one session run (if using the Codex key) |
 
-macOS / Windows / Linux に対応しています。
+Supports macOS / Windows / Linux.
 
 ---
 
-## インストール
+## Installation
 
-### リリースからインストール（推奨）
+### Install from a release (recommended)
 
-1. [Releases](https://github.com/ShotaArima/plugin-FlexDesigner-tokens/releases) から、自分の OS / アーキテクチャに合った `.flexplugin` をダウンロード
-2. FlexDesigner の **Key Library** からインポート
+1. Download the `.flexplugin` matching your OS/architecture from [Releases](https://github.com/ari-show/plugin-FlexDesigner-tokens/releases)
+2. Import it from FlexDesigner's **Key Library**
 
-### ソースからビルド
+### Build from source
 
 ```bash
-git clone https://github.com/ShotaArima/plugin-FlexDesigner-tokens.git
+git clone https://github.com/ari-show/plugin-FlexDesigner-tokens.git
 cd plugin-FlexDesigner-tokens
 npm install
 npm run build
-npm run plugin:pack       # com.arishow.aitokens.flexplugin が生成される
+npm run plugin:pack       # produces com.arishow.aitokens.flexplugin
 ```
 
 ---
 
-## 開発
+## Development
 
-### Nix を使う場合（推奨）
+### Using Nix (recommended)
 
-このリポジトリは flake で開発環境を固定しています。
+This repo pins its dev environment with a flake.
 
 ```bash
-nix develop          # direnv を使うなら `direnv allow` だけで有効化されます
+nix develop          # or just `direnv allow` if you use direnv
 npm install
-npm run dev          # FlexDesigner を起動した状態で実行してください
+npm run dev          # run this while FlexDesigner is already running
 ```
 
-Nix が未導入の場合は Determinate Systems インストーラが簡単です:
+If you don't have Nix, the Determinate Systems installer is the easiest way to get it:
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install
 ```
 
-`flake.nix` は Node.js 20 / git / jq を提供し、npm のグローバル prefix をリポジトリ内（`.npm-global`）に閉じ込めるため、`flexcli` がシステム全体を汚しません。
+`flake.nix` provides Node.js 20 / git / jq, and confines npm's global prefix inside the repo (`.npm-global`) so `flexcli` doesn't pollute your whole system.
 
-### Nix を使わない場合
+### Without Nix
 
-Node.js 20 以降があれば `npm install && npm run dev` で動きます。
+Node.js 20+ is enough: `npm install && npm run dev`.
 
-### 主なコマンド
+### Main commands
 
-| コマンド | 内容 |
+| Command | What it does |
 |---|---|
-| `npm run build` | バックエンドを `backend/plugin.cjs` にバンドル |
-| `npm run dev` | リンク + ウォッチ + デバッグ（FlexDesigner 起動中に実行） |
-| `npm run plugin:validate` | manifest と構造を検証 |
-| `npm run plugin:pack` | `.flexplugin` を生成 |
+| `npm run build` | Bundles the backend into `backend/plugin.cjs` |
+| `npm test` | Runs the unit test suite |
+| `npm run dev` | Link + watch + debug (run while FlexDesigner is running) |
+| `npm run plugin:validate` | Validates the manifest and plugin structure |
+| `npm run plugin:pack` | Produces the `.flexplugin` file |
 
-### 構成
+### Layout
 
 ```
 src/
-  plugin.js              SDK のイベント配線・ポーリング・バックオフ
-  render.js              @napi-rs/canvas によるキー描画（240×60）
+  plugin.js              SDK event wiring, polling, backoff
+  render.js              Key rendering (240×60) via @napi-rs/canvas
   providers/
-    claude.js            OAuth usage エンドポイント（要認証・要ネットワーク）
-    claudeAuth.js        OAuth トークンの更新・再ログイン（案A/案B）、資格情報の読み書き
-    codex.js             ~/.codex/sessions の rollout JSONL を読み取り
+    claude.js             OAuth usage endpoint (needs auth + network)
+    claudeAuth.js          OAuth token refresh / re-login (Plan A/B), credential read/write
+    codex.js                Reads rollout JSONL under ~/.codex/sessions
 com.arishow.aitokens.plugin/
-  manifest.json          キー定義・多言語リソース（en / ja）
-  ui/*.vue               設定画面（Vue 3 + Vuetify 3）
+  manifest.json          Key definitions, i18n resources (en / ja)
+  ui/*.vue               Settings page (Vue 3 + Vuetify 3)
+test/
+  providers/*.test.js    Unit tests for pure logic (normaliseWindow, etc.)
 ```
 
 ---
 
-## リリース
+## Releasing
 
-`manifest.json` の `version` と一致するタグを push すると、GitHub Actions が
-3 OS 分の `.flexplugin` をビルドして Release に添付します。
+Pushing a tag that matches the `version` in `manifest.json` triggers GitHub Actions to
+build a `.flexplugin` for all 3 OSes and attach them to a Release.
 
 ```bash
 git tag v1.0.0
@@ -136,21 +142,27 @@ git push origin v1.0.0
 
 ---
 
-## トラブルシューティング
+## Troubleshooting
 
-| 表示 | 原因と対処 |
+| Message | Cause and fix |
 |---|---|
-| `Claude credentials not found` | `claude` を実行してログインするか、プラグインの設定画面からログインしてください |
-| `Claude auth rejected (401)` / ログイン失効系のエラー | 通常は自動的に再試行・更新されます。改善しない場合は `claude` を実行するか、プラグインの設定画面から再ログインしてください（反映まで数分かかることがあります） |
-| `Rate limited by usage API (429)` | 更新間隔を長くしてください（60秒以上推奨） |
-| `No Codex sessions found` | Codex CLI を1回以上実行してください |
-| `No rate limit data in recent Codex sessions` | Codex で1ターン以上やり取りしてください |
-| キー右上に `·stale` | 更新に失敗し、直近の取得値を表示しています |
+| `Claude credentials not found` | Run `claude` and log in, or log in from the plugin's settings page |
+| `Claude auth rejected (401)` / other login-expiry errors | This is usually retried and refreshed automatically. If it persists, run `claude` again or re-login from the plugin settings page (can take a few minutes to take effect) |
+| `Rate limited by usage API (429)` | Increase the refresh interval (60 seconds or more recommended) |
+| `No Codex sessions found` | Run the Codex CLI at least once |
+| `No rate limit data in recent Codex sessions` | Have at least one turn of conversation with Codex |
+| `·stale` shown in the top-right of a key | The last refresh failed; showing the most recently fetched value |
 
 ---
 
-## ライセンス
+## Security
 
-[MIT](LICENSE) © ShotaArima
+See [SECURITY.md](SECURITY.md) for how to report vulnerabilities.
 
-このプロジェクトは Anthropic、OpenAI、EniacTech のいずれとも関係のない非公式なものです。
+---
+
+## License
+
+[MIT](LICENSE) © ari-show
+
+This project is unofficial and not affiliated with Anthropic, OpenAI, or EniacTech.

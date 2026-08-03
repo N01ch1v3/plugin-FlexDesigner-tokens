@@ -3,9 +3,28 @@
   "version": "1.0.0",
   "description": "FlexDesigner plugin showing remaining Claude Code and Codex usage quota on a Flexbar",
   "license": "MIT",
+  "author": "ari-show",
+  "homepage": "https://github.com/ari-show/plugin-FlexDesigner-tokens#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ari-show/plugin-FlexDesigner-tokens.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ari-show/plugin-FlexDesigner-tokens/issues"
+  },
+  "keywords": [
+    "flexdesigner",
+    "flexbar",
+    "claude-code",
+    "codex-cli",
+    "usage",
+    "rate-limit",
+    "plugin"
+  ],
   "type": "commonjs",
   "scripts": {
     "build": "rollup -c",
+    "test": "node --test test/",
     "dev": "npm-run-all plugin:unlink plugin:link -p plugin:watch plugin:debug",
     "plugin:watch": "rollup -c -w --watch.onEnd=\"npm run plugin:restart\"",
     "plugin:unlink": "flexcli plugin unlink --uuid com.arishow.aitokens --silent",

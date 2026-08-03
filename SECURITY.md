@@ -1,41 +1,41 @@
-# セキュリティポリシー
+# Security Policy
 
-## サポート対象バージョン
+## Supported Versions
 
-このプロジェクトは開発初期段階のため、**最新リリースのみ**をサポート対象とします。
-古いバージョンへのセキュリティパッチのバックポートは行いません。
+This project is early-stage, so **only the latest release** is supported.
+Security patches are not backported to older versions.
 
-## 脆弱性の報告
+## Reporting a Vulnerability
 
-脆弱性を発見した場合は、**公開の Issue を作成しないでください**。
+If you find a vulnerability, **please do not open a public issue**.
 
-代わりに GitHub の [Private vulnerability reporting](https://github.com/ShotaArima/plugin-FlexDesigner-tokens/security/advisories/new) から報告してください（リポジトリの **Security** タブ →
-**Report a vulnerability**）。
+Instead, report it via GitHub's [Private vulnerability reporting](https://github.com/ari-show/plugin-FlexDesigner-tokens/security/advisories/new)
+(repository **Security** tab → **Report a vulnerability**).
 
-報告には可能な範囲で以下を含めてください。
+Please include as much of the following as you can:
 
-- 影響を受けるバージョン / OS
-- 再現手順
-- 想定される影響範囲
+- Affected version(s) / OS
+- Steps to reproduce
+- Expected impact
 
-対応状況の目安をお約束できるものではありませんが、可能な限り速やかに確認します。
+There's no guaranteed response time, but reports will be reviewed as quickly as possible.
 
-## トークンの取り扱いについて
+## Token handling
 
-このプラグインが Claude / Codex の認証情報に対して行うこと・行わないことの要約です。詳細は
-[README.md](README.md#トークンの取り扱い) を参照してください。
+A summary of what this plugin does and does not do with Claude/Codex credentials. See
+[README.md](README.md#how-tokens-are-handled) for details.
 
-- 読み取るのは **ローカルに保存済みの OAuth トークン**（macOS Keychain / `~/.claude/.credentials.json`）のみで、
-  プラグイン自身が新規にパスワードや認証情報を要求することはありません
-- トークンが失効している場合、`refreshToken` を使ったサイレント更新（案A）、または設定画面からの
-  ブラウザ再ログイン（案B、プラグイン専用の資格情報として別途保存）のいずれかで補います
-- トークンは **Anthropic への認証リクエストにのみ使用**し、ログ・設定ファイル・キーの描画内容には
-  一切出力しません
-- **第三者への送信は行いません**。ネットワーク通信は Anthropic の公式ドメイン（`api.anthropic.com` /
-  `console.anthropic.com` / `claude.ai`）以外には行いません
+- The only thing read is an **already-saved local OAuth token** (macOS Keychain / `~/.claude/.credentials.json`).
+  The plugin never prompts for or collects new credentials itself
+- If the token has expired, it's refreshed either via silent `refreshToken`-based refresh (Plan A), or via a
+  browser re-login from the settings page (Plan B, stored separately as plugin-only credentials)
+- Tokens are **used only to authenticate to Anthropic** and are never written to logs, config files, or key
+  rendering output
+- **Nothing is ever sent to any third party.** Network requests only go to Anthropic's official domains
+  (`api.anthropic.com` / `console.anthropic.com` / `claude.ai`)
 
-## 非公式 API への依存について
+## Dependence on an unofficial API
 
-Claude キーの機能は Anthropic が公開していない内部 API に依存しています（詳細は
-[README.md](README.md) の該当セクションを参照）。Anthropic からの要請があった場合、該当機能は
-予告なく無効化・変更する可能性があります。
+The Claude key's functionality depends on an internal API Anthropic has not publicly documented (see the
+relevant section in [README.md](README.md) for details). If Anthropic requests it, this functionality may be
+disabled or changed without notice.
