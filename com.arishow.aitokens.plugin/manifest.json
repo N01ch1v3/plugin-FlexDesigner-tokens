@@ -1,7 +1,7 @@
 {
     "name": "AI Tokens",
     "uuid": "com.arishow.aitokens",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "author": "ari-show",
     "entry": "backend/plugin.cjs",
     "description": "Show remaining Claude Code and Codex usage quota on your Flexbar",

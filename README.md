@@ -136,8 +136,8 @@ Pushing a tag that matches the `version` in `manifest.json` triggers GitHub Acti
 build a `.flexplugin` for all 3 OSes and attach them to a Release.
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.0.1
+git push origin v1.0.1
 ```
 
 ---
