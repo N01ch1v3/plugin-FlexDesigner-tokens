@@ -113,6 +113,17 @@ function labelFor(cid) {
   return cid === CID.claude ? "CLAUDE" : "CODEX";
 }
 
+/**
+ * plugin.draw() rejects if the physical device has disconnected (e.g. a USB
+ * hiccup). Left unhandled, that rejection crashes the whole backend process,
+ * killing every key until FlexDesigner restarts it. Swallow and log instead.
+ */
+function safeDraw(serialNumber, key, format, data) {
+  Promise.resolve(plugin.draw(serialNumber, key, format, data)).catch((err) => {
+    logger.warn(`[${key.cid}] draw failed: ${err.message}`);
+  });
+}
+
 /** Draws whatever the current state warrants, then schedules the next refresh. */
 async function refresh(uid, { force = false } = {}) {
   const state = keys.get(uid);
@@ -130,7 +141,7 @@ async function refresh(uid, { force = false } = {}) {
     state.lastData = data;
     state.failures = 0;
 
-    plugin.draw(serialNumber, key, "base64", renderFor(cid, data, { width }));
+    safeDraw(serialNumber, key, "base64", renderFor(cid, data, { width }));
   } catch (err) {
     state.failures = (state.failures || 0) + 1;
     logger.warn(`[${cid}] refresh failed (${state.failures}): ${err.message}`);
@@ -138,9 +149,9 @@ async function refresh(uid, { force = false } = {}) {
     if (state.lastData) {
       // Prefer a stale-but-real number over an error card; mark it as stale so
       // the value is never silently trusted as current.
-      plugin.draw(serialNumber, key, "base64", renderFor(cid, state.lastData, { width, stale: true }));
+      safeDraw(serialNumber, key, "base64", renderFor(cid, state.lastData, { width, stale: true }));
     } else {
-      plugin.draw(serialNumber, key, "base64", renderError(labelFor(cid), err.message, { width }));
+      safeDraw(serialNumber, key, "base64", renderError(labelFor(cid), err.message, { width }));
     }
   } finally {
     schedule(uid);
