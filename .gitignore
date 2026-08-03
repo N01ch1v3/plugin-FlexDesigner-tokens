@@ -2,7 +2,7 @@ node_modules
 logs
 .vscode
 .env
-package-lock.json
+# package-lock.json
 *.flexplugin
 
 # Build output
