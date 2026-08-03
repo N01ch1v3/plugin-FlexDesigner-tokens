@@ -1,7 +1,7 @@
 {
     "name": "AI Tokens",
     "uuid": "com.arishow.aitokens",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "author": "ShotaArima",
     "entry": "backend/plugin.cjs",
     "description": "Show remaining Claude Code and Codex usage quota on your Flexbar",
@@ -98,6 +98,16 @@
                 "Interval": "Refresh interval (seconds)",
                 "IntervalHint": "Claude's usage API is rate limited; 60 seconds or more is recommended.",
                 "Note": "Claude usage is read from Anthropic's OAuth usage endpoint using your local Claude Code login. Codex usage is read from local session files. Nothing is sent anywhere else."
+            },
+            "Relogin": {
+                "Title": "Claude re-login (fallback)",
+                "Subtitle": "Claude Code's own login is refreshed automatically. Only use this if the key shows a login error.",
+                "Button": "Log in with browser",
+                "CodeLabel": "Paste the code from the Anthropic page",
+                "CodeHint": "After logging in, the page shows a code like abcd#1234 — paste the whole thing here.",
+                "StatusAwaitingCode": "Browser opened. Log in, then paste the code shown on the page above.",
+                "StatusSuccess": "Logged in. The Claude key will refresh shortly.",
+                "StatusError": "Login failed:"
             }
         },
         "ja": {
@@ -114,6 +124,16 @@
                 "Interval": "更新間隔（秒）",
                 "IntervalHint": "Claude の使用量 API はレート制限が厳しいため、60秒以上を推奨します。",
                 "Note": "Claude の使用量はローカルの Claude Code ログインを使い Anthropic の OAuth エンドポイントから取得します。Codex はローカルのセッションファイルから読み取ります。外部への送信は行いません。"
+            },
+            "Relogin": {
+                "Title": "Claude 再ログイン（フォールバック）",
+                "Subtitle": "通常は Claude Code のログインが自動的に更新されます。キーがログインエラーを表示した時だけ使ってください。",
+                "Button": "ブラウザでログイン",
+                "CodeLabel": "Anthropic のページに表示されたコードを貼り付け",
+                "CodeHint": "ログイン後のページに abcd#1234 のようなコードが表示されるので、そのまま全部貼り付けてください。",
+                "StatusAwaitingCode": "ブラウザを開きました。ログイン後、上のページに表示されたコードを貼り付けてください。",
+                "StatusSuccess": "ログインしました。まもなく Claude キーが更新されます。",
+                "StatusError": "ログインに失敗しました:"
             }
         }
     }

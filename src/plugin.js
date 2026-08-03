@@ -5,9 +5,11 @@
  * See src/providers/* for where each number comes from — the two providers work
  * very differently (Claude is a network call, Codex is a local file read).
  */
+const { execFile } = require("node:child_process");
 const { plugin, logger } = require("@eniac/flexdesigner");
 const claudeProvider = require("./providers/claude");
 const codexProvider = require("./providers/codex");
+const claudeAuth = require("./providers/claudeAuth");
 const { renderClaude, renderCodex, renderError } = require("./render");
 
 const CID = {
@@ -26,6 +28,76 @@ const MAX_BACKOFF_MS = 15 * 60_000;
 
 /** Live key state, keyed by key.uid. */
 const keys = new Map();
+
+// Tracks the last-seen values of the settings-page re-login fields, so we only
+// react when the user actually changes them (plugin.config.updated fires on
+// every config save, including unrelated ones like intervalMs).
+let lastSeenReloginRequestedAt = null;
+let lastSeenReloginCode = null;
+
+/** Opens `url` in the OS default browser, best-effort. */
+function openBrowser(url) {
+  if (process.platform === "darwin") return execFile("open", [url]);
+  if (process.platform === "win32") return execFile("cmd", ["/c", "start", "", url]);
+  return execFile("xdg-open", [url]);
+}
+
+/** Forces an immediate refresh of every currently-live Claude key. */
+function refreshAllClaudeKeys() {
+  keys.forEach((state, uid) => {
+    if (state.key.cid === CID.claude) refresh(uid, { force: true });
+  });
+}
+
+/**
+ * Handles the settings-page "log in with browser" / "paste code" fields (案B).
+ * Both are plain config values — the frontend has no documented API to call the
+ * backend directly, but writing to `modelValue.config` already round-trips
+ * through `plugin.config.updated` (as intervalMs does today), so we piggyback
+ * on that instead of relying on anything undocumented.
+ */
+async function handleReloginConfig(config) {
+  if (!config) return;
+
+  const requestedAt = config.claudeReloginRequestedAt || null;
+  if (requestedAt && requestedAt !== lastSeenReloginRequestedAt) {
+    lastSeenReloginRequestedAt = requestedAt;
+    try {
+      const url = claudeAuth.buildAuthorizeUrl();
+      openBrowser(url);
+      await plugin.setConfig({ ...config, claudeReloginStatus: "awaiting-code" });
+    } catch (err) {
+      logger.warn(`[claude] failed to start browser re-login: ${err.message}`);
+      await plugin.setConfig({ ...config, claudeReloginStatus: "error", claudeReloginError: err.message });
+    }
+    return;
+  }
+
+  const code = config.claudeReloginCode || "";
+  if (code && code !== lastSeenReloginCode) {
+    lastSeenReloginCode = code;
+    try {
+      const tokens = await claudeAuth.exchangeCode(code);
+      await claudeAuth.writeOwnCredentials(tokens);
+      await plugin.setConfig({
+        ...config,
+        claudeReloginCode: "",
+        claudeReloginStatus: "success",
+        claudeReloginError: ""
+      });
+      refreshAllClaudeKeys();
+      logger.info("[claude] fallback login (案B) succeeded");
+    } catch (err) {
+      logger.warn(`[claude] fallback login (案B) failed: ${err.message}`);
+      await plugin.setConfig({
+        ...config,
+        claudeReloginCode: "",
+        claudeReloginStatus: "error",
+        claudeReloginError: err.message
+      });
+    }
+  }
+}
 
 function providerFor(cid) {
   if (cid === CID.claude) return claudeProvider;
@@ -139,14 +211,21 @@ plugin.on("plugin.dead", (payload) => {
 });
 
 plugin.on("plugin.config.updated", (payload) => {
-  const interval = payload?.config?.intervalMs;
-  if (!interval) return;
+  const config = payload?.config;
+  if (!config) return;
 
-  keys.forEach((state, uid) => {
-    state.intervalMs = interval;
-    schedule(uid);
+  const interval = config.intervalMs;
+  if (interval) {
+    keys.forEach((state, uid) => {
+      state.intervalMs = interval;
+      schedule(uid);
+    });
+    logger.info(`Refresh interval updated to ${interval}ms`);
+  }
+
+  handleReloginConfig(config).catch((err) => {
+    logger.warn(`[claude] re-login config handling failed: ${err.message}`);
   });
-  logger.info(`Refresh interval updated to ${interval}ms`);
 });
 
 plugin.start();

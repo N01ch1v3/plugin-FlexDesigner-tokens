@@ -18,7 +18,9 @@ Claude Code と Codex CLI の**残りクォータ**を Flexbar のキー上に�
 このプラグインは Claude の残量取得に `https://api.anthropic.com/api/oauth/usage` を使用します。
 
 - これは **Anthropic の公開 API リファレンスに記載されていないエンドポイント**です。Claude Code 自身が `/usage` の表示に使っているものと同じで、コミュニティによって発見されました
-- 認証には、**お使いの Claude Code がログイン時に保存した OAuth トークンをそのまま利用**します。本プラグインが独自にログイン処理（ブラウザ認証など）を行うことはありません
+- 認証には、通常は**お使いの Claude Code がログイン時に保存した OAuth トークンをそのまま利用**します。トークンが失効している場合は `refreshToken` を使ってサイレントに更新し、Claude Code の資格情報に書き戻します（案A）
+  - このリフレッシュ処理が使う `https://console.anthropic.com/v1/oauth/token` も同様に**非公開のエンドポイント**です
+  - `refreshToken` 自体が失効している場合に限り、設定画面から Anthropic のブラウザ認可フローでログインし直せます（案B）。この場合のトークンは**プラグイン専用に保存**し、Claude Code 本体の資格情報には一切書き込みません（別デバイスからログインしたのと同じ扱いです）
 - リクエストには Claude Code と互換の `User-Agent`（`claude-code/<バージョン>`）を付与します。このエンドポイントが Claude Code クライアントからのアクセスを前提としているためで、バージョンはローカルの `claude --version` から取得します
 - 行うのは**自分のアカウントの使用量情報の読み取りのみ**です。トークンの消費・課金・アカウント設定の変更は一切行いません
 - **Anthropic の仕様変更により予告なく壊れる可能性があります**
@@ -32,6 +34,7 @@ Claude Code と Codex CLI の**残りクォータ**を Flexbar のキー上に�
 ### トークンの取り扱い
 
 - Claude の OAuth トークンは macOS では **Keychain**（`Claude Code-credentials`）、Linux / Windows では `~/.claude/.credentials.json` から読み取ります
+- 案B（設定画面からの再ログイン）で発行されたトークンは、Claude Code とは別に、macOS では **Keychain の別アイテム**（`FlexDesigner AI Tokens-credentials`）、Linux / Windows では専用ファイル（`~/.claude/flexdesigner-ai-tokens.credentials.json`、パーミッション 600）に保存します
 - トークンは **Anthropic への認証にのみ使用**し、ログ・設定ファイル・キーの描画内容には一切出力しません
 - **第三者への送信は行いません**
 
@@ -112,6 +115,7 @@ src/
   render.js              @napi-rs/canvas によるキー描画（240×60）
   providers/
     claude.js            OAuth usage エンドポイント（要認証・要ネットワーク）
+    claudeAuth.js        OAuth トークンの更新・再ログイン（案A/案B）、資格情報の読み書き
     codex.js             ~/.codex/sessions の rollout JSONL を読み取り
 com.arishow.aitokens.plugin/
   manifest.json          キー定義・多言語リソース（en / ja）
@@ -126,8 +130,8 @@ com.arishow.aitokens.plugin/
 3 OS 分の `.flexplugin` をビルドして Release に添付します。
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
 ---
@@ -136,8 +140,8 @@ git push origin v0.1.0
 
 | 表示 | 原因と対処 |
 |---|---|
-| `Claude credentials not found` | `claude` を実行してログインしてください |
-| `Claude auth rejected (401)` | トークンが失効しています。`claude` を再実行してください |
+| `Claude credentials not found` | `claude` を実行してログインするか、プラグインの設定画面からログインしてください |
+| `Claude auth rejected (401)` / ログイン失効系のエラー | 通常は自動的に再試行・更新されます。改善しない場合は `claude` を実行するか、プラグインの設定画面から再ログインしてください（反映まで数分かかることがあります） |
 | `Rate limited by usage API (429)` | 更新間隔を長くしてください（60秒以上推奨） |
 | `No Codex sessions found` | Codex CLI を1回以上実行してください |
 | `No rate limit data in recent Codex sessions` | Codex で1ターン以上やり取りしてください |

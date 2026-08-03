@@ -6,62 +6,125 @@
  * uses to render `/usage`. It may change or disappear without notice.
  *
  * Auth token lives in the macOS Keychain (item "Claude Code-credentials"), or in
- * ~/.claude/.credentials.json on Linux/Windows.
+ * ~/.claude/.credentials.json on Linux/Windows. If that token has expired, it is
+ * silently refreshed via `refreshToken` and written back (案A); if the refresh
+ * token itself is dead, we fall back to a plugin-only login done from the
+ * settings page (案B) — see providers/claudeAuth.js.
  */
-const os = require("node:os");
-const path = require("node:path");
-const fs = require("node:fs/promises");
 const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
+const claudeAuth = require("./claudeAuth");
 
 const execFileAsync = promisify(execFile);
 
 const USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
-const KEYCHAIN_SERVICE = "Claude Code-credentials";
 
 // The endpoint rate-limits aggressively; never poll faster than this.
 const MIN_REFRESH_MS = 60_000;
 
+// Refresh a little before actual expiry so a slow request doesn't race past it.
+const SAFETY_MARGIN_MS = 30_000;
+
 let cache = { at: 0, data: null };
 
-/**
- * Reads the Claude Code OAuth credentials blob for the current platform.
- * @returns {Promise<{accessToken: string, expiresAt?: number}>}
- */
-async function readCredentials() {
-  let raw;
+function isFresh(oauth) {
+  return !oauth.expiresAt || oauth.expiresAt > Date.now() + SAFETY_MARGIN_MS;
+}
 
-  if (process.platform === "darwin") {
-    try {
-      const { stdout } = await execFileAsync("security", [
-        "find-generic-password",
-        "-s",
-        KEYCHAIN_SERVICE,
-        "-w"
-      ]);
-      raw = stdout;
-    } catch {
-      throw new Error("Claude credentials not found in Keychain. Run `claude` and log in first.");
-    }
-  } else {
-    const file = path.join(os.homedir(), ".claude", ".credentials.json");
-    try {
-      raw = await fs.readFile(file, "utf8");
-    } catch {
-      throw new Error(`Claude credentials not found at ${file}. Run \`claude\` and log in first.`);
-    }
+/** True for errors that mean "nothing usable in this credential store", as opposed to a transient network blip. */
+function isReauthTrigger(err) {
+  if (err instanceof claudeAuth.InvalidGrantError) return true;
+  return /credentials not found|No accessToken|not valid JSON/.test(err.message || "");
+}
+
+let sharedRefreshInFlight = null;
+
+/** Ensures Claude Code's own shared credentials have a live access token, refreshing (案A) if needed. */
+async function ensureFreshSharedToken() {
+  const { oauth } = await claudeAuth.readSharedCredentials();
+  if (isFresh(oauth)) return oauth;
+
+  if (!sharedRefreshInFlight) {
+    sharedRefreshInFlight = refreshSharedToken().finally(() => {
+      sharedRefreshInFlight = null;
+    });
   }
+  return sharedRefreshInFlight;
+}
 
-  let parsed;
+async function refreshSharedToken() {
+  // Re-read right before hitting the network — Claude Code itself may have
+  // already refreshed (and rotated the refresh token) since our first read.
+  let { parsed, oauth } = await claudeAuth.readSharedCredentials();
+  if (isFresh(oauth)) return oauth;
+
   try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error("Claude credentials are not valid JSON.");
-  }
+    const tokens = await claudeAuth.refreshWithToken(oauth.refreshToken);
+    await claudeAuth.writeSharedCredentials(parsed, tokens);
+    return { ...oauth, ...tokens };
+  } catch (err) {
+    if (err instanceof claudeAuth.InvalidGrantError) throw err;
 
-  const oauth = parsed.claudeAiOauth || parsed;
-  if (!oauth.accessToken) throw new Error("No accessToken in Claude credentials.");
-  return oauth;
+    // Transient failure (network, rate limit, ...): retry exactly once.
+    ({ parsed, oauth } = await claudeAuth.readSharedCredentials());
+    if (isFresh(oauth)) return oauth;
+    const tokens = await claudeAuth.refreshWithToken(oauth.refreshToken);
+    await claudeAuth.writeSharedCredentials(parsed, tokens);
+    return { ...oauth, ...tokens };
+  }
+}
+
+let ownRefreshInFlight = null;
+
+/** Ensures the plugin's own fallback credentials (案B) have a live access token. */
+async function ensureFreshOwnToken() {
+  const creds = await claudeAuth.readOwnCredentials();
+  if (!creds) throw new claudeAuth.ReauthRequiredError("No fallback login found.");
+  if (isFresh(creds.oauth)) return creds.oauth;
+
+  if (!ownRefreshInFlight) {
+    ownRefreshInFlight = refreshOwnToken(creds).finally(() => {
+      ownRefreshInFlight = null;
+    });
+  }
+  return ownRefreshInFlight;
+}
+
+async function refreshOwnToken(initial) {
+  let creds = initial;
+  if (isFresh(creds.oauth)) return creds.oauth;
+
+  try {
+    const tokens = await claudeAuth.refreshWithToken(creds.oauth.refreshToken);
+    await claudeAuth.writeOwnCredentials(tokens);
+    return { ...creds.oauth, ...tokens };
+  } catch (err) {
+    if (err instanceof claudeAuth.InvalidGrantError) throw err;
+
+    creds = await claudeAuth.readOwnCredentials();
+    if (!creds) throw err;
+    if (isFresh(creds.oauth)) return creds.oauth;
+    const tokens = await claudeAuth.refreshWithToken(creds.oauth.refreshToken);
+    await claudeAuth.writeOwnCredentials(tokens);
+    return { ...creds.oauth, ...tokens };
+  }
+}
+
+/** Resolves a live access token, trying Claude Code's own credentials (案A) before the plugin's fallback login (案B). */
+async function ensureAccessToken() {
+  try {
+    return await ensureFreshSharedToken();
+  } catch (sharedErr) {
+    if (!isReauthTrigger(sharedErr)) throw sharedErr;
+
+    try {
+      return await ensureFreshOwnToken();
+    } catch {
+      throw new claudeAuth.ReauthRequiredError(
+        "Claude login has expired. Log in again from the plugin settings page."
+      );
+    }
+  }
 }
 
 /**
@@ -106,15 +169,12 @@ async function getUsage(opts = {}) {
     return cache.data;
   }
 
-  const creds = await readCredentials();
-  if (creds.expiresAt && creds.expiresAt < now) {
-    throw new Error("Claude OAuth token expired. Run `claude` to refresh it.");
-  }
+  const oauth = await ensureAccessToken();
 
   const version = await claudeCodeVersion();
   const res = await fetch(USAGE_URL, {
     headers: {
-      Authorization: `Bearer ${creds.accessToken}`,
+      Authorization: `Bearer ${oauth.accessToken}`,
       "User-Agent": `claude-code/${version}`,
       "anthropic-beta": "oauth-2025-04-20",
       Accept: "application/json"
@@ -122,7 +182,9 @@ async function getUsage(opts = {}) {
     signal: AbortSignal.timeout(10_000)
   });
 
-  if (res.status === 401) throw new Error("Claude auth rejected (401). Re-login with `claude`.");
+  if (res.status === 401) {
+    throw new claudeAuth.ReauthRequiredError("Claude auth rejected (401). Log in again from the plugin settings page.");
+  }
   if (res.status === 429) throw new Error("Rate limited by usage API (429). Backing off.");
   if (!res.ok) throw new Error(`Usage API returned HTTP ${res.status}.`);
 
@@ -150,4 +212,4 @@ async function getUsage(opts = {}) {
   return data;
 }
 
-module.exports = { getUsage, MIN_REFRESH_MS };
+module.exports = { getUsage, MIN_REFRESH_MS, ReauthRequiredError: claudeAuth.ReauthRequiredError };
