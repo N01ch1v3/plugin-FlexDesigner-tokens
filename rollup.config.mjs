@@ -6,12 +6,14 @@ import json from "@rollup/plugin-json";
 import path from "node:path";
 import url from "node:url";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import { glob } from "glob";
 import { fileURLToPath } from "node:url";
 
 const isWatching = !!process.env.ROLLUP_WATCH;
 const flexPlugin = "com.arishow.aitokens.plugin";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
 
 // Platform-specific @napi-rs/canvas binaries must be copied next to the bundle;
 // rollup cannot inline .node files.
@@ -29,8 +31,14 @@ const canvasPlatforms = [
 function canvasCopyTargets() {
   const targets = [];
   for (const platform of canvasPlatforms) {
-    const modulePath = `node_modules/@napi-rs/${platform}`;
-    if (!fs.existsSync(modulePath)) continue;
+    let modulePath = `node_modules/@napi-rs/${platform}`;
+    if (!fs.existsSync(modulePath)) {
+      try {
+        modulePath = path.dirname(require.resolve(`@napi-rs/${platform}/package.json`));
+      } catch {
+        continue;
+      }
+    }
     try {
       const files = fs.readdirSync(modulePath);
       const nodeFile = files.find((f) => f.endsWith(".node"));

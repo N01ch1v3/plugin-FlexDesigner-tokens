@@ -1,6 +1,6 @@
 {
   "name": "flexdesigner-ai-tokens",
-  "version": "1.0.1",
+  "version": "1.0.7",
   "description": "FlexDesigner plugin showing remaining Claude Code and Codex usage quota on a Flexbar",
   "license": "MIT",
   "author": "ari-show",
@@ -24,7 +24,7 @@
   "type": "commonjs",
   "scripts": {
     "build": "rollup -c",
-    "test": "node --test test/",
+    "test": "node --test",
     "dev": "npm-run-all plugin:unlink plugin:link -p plugin:watch plugin:debug",
     "plugin:watch": "rollup -c -w --watch.onEnd=\"npm run plugin:restart\"",
     "plugin:unlink": "flexcli plugin unlink --uuid com.arishow.aitokens --silent",

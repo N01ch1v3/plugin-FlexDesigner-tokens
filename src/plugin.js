@@ -9,19 +9,24 @@ const { execFile } = require("node:child_process");
 const { plugin, logger } = require("@eniac/flexdesigner");
 const claudeProvider = require("./providers/claude");
 const codexProvider = require("./providers/codex");
+const codexActivityProvider = require("./providers/codexActivity");
 const claudeAuth = require("./providers/claudeAuth");
-const { renderClaude, renderCodex, renderError } = require("./render");
+const { renderClaude, renderCodex, renderCodexStatus, renderCodexSession, renderError } = require("./render");
 
 const CID = {
   claude: "com.arishow.aitokens.claude",
-  codex: "com.arishow.aitokens.codex"
+  codex: "com.arishow.aitokens.codex",
+  codexStatus: "com.arishow.aitokens.codex-status",
+  codexSession: "com.arishow.aitokens.codex-session"
 };
 
 // Claude's usage endpoint rate-limits hard, so it gets a slower default poll
 // than Codex, which is just reading a local file.
 const DEFAULT_INTERVAL_MS = {
   [CID.claude]: 120_000,
-  [CID.codex]: 30_000
+  [CID.codex]: 30_000,
+  [CID.codexStatus]: 2_000,
+  [CID.codexSession]: 10_000
 };
 
 const MAX_BACKOFF_MS = 15 * 60_000;
@@ -102,15 +107,26 @@ async function handleReloginConfig(config) {
 function providerFor(cid) {
   if (cid === CID.claude) return claudeProvider;
   if (cid === CID.codex) return codexProvider;
+  if (cid === CID.codexStatus || cid === CID.codexSession) return codexActivityProvider;
   return null;
 }
 
 function renderFor(cid, data, opts) {
-  return cid === CID.claude ? renderClaude(data, opts) : renderCodex(data, opts);
+  if (cid === CID.claude) return renderClaude(data, opts);
+  if (cid === CID.codex) return renderCodex(data, opts);
+  if (cid === CID.codexStatus) return renderCodexStatus(data, opts);
+  return renderCodexSession(data, opts);
 }
 
 function labelFor(cid) {
-  return cid === CID.claude ? "CLAUDE" : "CODEX";
+  if (cid === CID.claude) return "CLAUDE";
+  if (cid === CID.codexStatus) return "CODEX STATUS";
+  if (cid === CID.codexSession) return "CODEX SESSION";
+  return "CODEX";
+}
+
+function getProviderData(provider, opts) {
+  return provider === codexActivityProvider ? provider.getSnapshot(opts) : provider.getUsage(opts);
 }
 
 /**
@@ -128,6 +144,8 @@ function safeDraw(serialNumber, key, format, data) {
 async function refresh(uid, { force = false } = {}) {
   const state = keys.get(uid);
   if (!state) return;
+  const refreshSeq = (state.refreshSeq || 0) + 1;
+  state.refreshSeq = refreshSeq;
 
   const { serialNumber, key } = state;
   const cid = key.cid;
@@ -137,12 +155,14 @@ async function refresh(uid, { force = false } = {}) {
   const width = key.style?.width || undefined;
 
   try {
-    const data = await provider.getUsage({ force });
+    const data = await getProviderData(provider, { force });
+    if (keys.get(uid) !== state || state.refreshSeq !== refreshSeq) return;
     state.lastData = data;
     state.failures = 0;
 
     safeDraw(serialNumber, key, "base64", renderFor(cid, data, { width }));
   } catch (err) {
+    if (keys.get(uid) !== state || state.refreshSeq !== refreshSeq) return;
     state.failures = (state.failures || 0) + 1;
     logger.warn(`[${cid}] refresh failed (${state.failures}): ${err.message}`);
 
@@ -154,7 +174,7 @@ async function refresh(uid, { force = false } = {}) {
       safeDraw(serialNumber, key, "base64", renderError(labelFor(cid), err.message, { width }));
     }
   } finally {
-    schedule(uid);
+    if (keys.get(uid) === state && state.refreshSeq === refreshSeq) schedule(uid);
   }
 }
 
@@ -187,6 +207,7 @@ plugin.on("plugin.alive", (payload) => {
       key,
       failures: 0,
       lastData: existing?.lastData || null,
+      refreshSeq: existing?.refreshSeq || 0,
       intervalMs: key.data?.intervalMs || null,
       timer: null
     });
@@ -206,6 +227,7 @@ plugin.on("plugin.data", (payload) => {
     state.key = key;
     state.serialNumber = serialNumber;
     state.failures = 0;
+    state.intervalMs = key.data?.intervalMs || null;
   }
 
   refresh(key.uid, { force: true });

@@ -12,6 +12,7 @@ const DEFAULT_WIDTH = 240;
 
 // Fixed status palette — reserved for state, never reused as series colours.
 const STATUS = {
+  active: "#4da3ff",
   good: "#0ca30c",
   warning: "#fab219",
   serious: "#ec835a",
@@ -82,6 +83,23 @@ function newCanvas(width) {
   ctx.fillStyle = INK.surface;
   ctx.fillRect(0, 0, width, KEY_HEIGHT);
   return { canvas, ctx };
+}
+
+function fitText(ctx, text, maxWidth) {
+  let value = String(text || "");
+  if (ctx.measureText(value).width <= maxWidth) return value;
+  while (value.length > 1 && ctx.measureText(`${value}…`).width > maxWidth) value = value.slice(0, -1);
+  return `${value}…`;
+}
+
+function compactDuration(ms) {
+  if (typeof ms !== "number" || ms < 0) return "";
+  const seconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  if (hours) return `${hours}h${minutes % 60}m`;
+  if (minutes) return `${minutes}m${seconds % 60}s`;
+  return `${seconds}s`;
 }
 
 /**
@@ -211,6 +229,99 @@ function renderCodex(data, opts = {}) {
   });
 }
 
+/** Codex activity key: explicit rollout lifecycle state plus a safe tool category. */
+function renderCodexStatus(data, opts = {}) {
+  const width = opts.width || DEFAULT_WIDTH;
+  const { canvas, ctx } = newCanvas(width);
+  const pad = 8;
+  const status = data.status || {};
+  const session = data.session || {};
+  const state = status.state || "idle";
+  const color = state === "working" ? STATUS.active : state === "complete" ? STATUS.good : state === "aborted" ? STATUS.critical : INK.secondary;
+  const elapsed =
+    state === "working" && status.startedAt
+      ? compactDuration(Math.max(0, Date.now() - status.startedAt))
+      : compactDuration(status.durationMs);
+
+  ctx.textBaseline = "top";
+  ctx.font = "600 10px sans-serif";
+  ctx.fillStyle = INK.muted;
+  ctx.textAlign = "left";
+  const elapsedWidth = elapsed ? ctx.measureText(elapsed).width + 8 : 0;
+  const headerWidth = width - pad * 2 - elapsedWidth;
+  const prefix = session.project ? "CODEX · " : "CODEX";
+  ctx.fillText(prefix, pad, pad);
+  if (session.project) {
+    const prefixWidth = ctx.measureText(prefix).width;
+    ctx.fillStyle = INK.primary;
+    ctx.fillText(fitText(ctx, session.project, Math.max(0, headerWidth - prefixWidth)), pad + prefixWidth, pad);
+  }
+  if (elapsed) {
+    ctx.textAlign = "right";
+    ctx.fillText(elapsed, width - pad, pad);
+  }
+
+  ctx.textAlign = "left";
+  ctx.font = "700 20px sans-serif";
+  ctx.fillStyle = color;
+  ctx.fillText(fitText(ctx, status.action || state.toUpperCase(), width - pad * 2), pad, 22);
+
+  const sandbox =
+    session.sandbox === "workspace-write"
+      ? "WS"
+      : session.sandbox === "read-only"
+        ? "RO"
+        : session.sandbox === "danger-full-access" || session.sandbox === "full-access"
+          ? "FULL"
+          : session.sandbox;
+  const detail =
+    state === "aborted" && status.reason
+      ? status.reason
+      : [session.model, session.effort ? String(session.effort).toUpperCase() : null, sandbox]
+          .filter(Boolean)
+          .join(" · ");
+  ctx.font = "400 9px sans-serif";
+  ctx.fillStyle = INK.secondary;
+  ctx.fillText(fitText(ctx, detail || "No active Codex turn", width - pad * 2), pad, 47);
+
+  return canvas.toDataURL("image/png");
+}
+
+/** Codex session key: project/model plus the most useful execution settings. */
+function renderCodexSession(data, opts = {}) {
+  const width = opts.width || DEFAULT_WIDTH;
+  const { canvas, ctx } = newCanvas(width);
+  const pad = 8;
+  const session = data.session || {};
+
+  ctx.textBaseline = "top";
+  ctx.textAlign = "left";
+  ctx.font = "600 10px sans-serif";
+  ctx.fillStyle = INK.muted;
+  ctx.fillText("CODEX SESSION", pad, 6);
+  if (session.effort) {
+    ctx.textAlign = "right";
+    ctx.fillStyle = STATUS.active;
+    ctx.fillText(String(session.effort).toUpperCase(), width - pad, 6);
+  }
+
+  ctx.textAlign = "left";
+  ctx.font = "700 15px sans-serif";
+  ctx.fillStyle = INK.primary;
+  ctx.fillText(fitText(ctx, session.project || "No Codex session", width - pad * 2), pad, 20);
+
+  ctx.font = "400 10px sans-serif";
+  ctx.fillStyle = INK.secondary;
+  ctx.fillText(fitText(ctx, session.model || "Unknown model", width - pad * 2), pad, 38);
+
+  const detail = [session.branch, session.sandbox].filter(Boolean).join(" · ");
+  ctx.font = "400 8px sans-serif";
+  ctx.fillStyle = INK.muted;
+  ctx.fillText(fitText(ctx, detail || session.cwd || "Session metadata unavailable", width - pad * 2), pad, 51);
+
+  return canvas.toDataURL("image/png");
+}
+
 /**
  * Error state. Never leaves the key blank — a silent key is indistinguishable
  * from a healthy one at a glance.
@@ -245,8 +356,11 @@ function renderError(label, message, opts = {}) {
 module.exports = {
   renderClaude,
   renderCodex,
+  renderCodexStatus,
+  renderCodexSession,
   renderError,
   countdown,
+  compactDuration,
   statusFor,
   KEY_HEIGHT,
   DEFAULT_WIDTH,

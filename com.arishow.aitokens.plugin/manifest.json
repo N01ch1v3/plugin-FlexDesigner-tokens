@@ -1,7 +1,7 @@
 {
     "name": "AI Tokens",
     "uuid": "com.arishow.aitokens",
-    "version": "1.0.1",
+    "version": "1.0.7",
     "author": "ari-show",
     "entry": "backend/plugin.cjs",
     "description": "Show remaining Claude Code and Codex usage quota on your Flexbar",
@@ -80,6 +80,27 @@
                 "data": {
                     "intervalMs": 30000
                 }
+            },
+            {
+                "title": "$CodexStatus.Title",
+                "tip": "$CodexStatus.Tip",
+                "cid": "com.arishow.aitokens.codex-status",
+                "config": {
+                    "keyType": "default",
+                    "clickable": true,
+                    "platform": [
+                        "windows",
+                        "mac",
+                        "linux"
+                    ]
+                },
+                "style": {
+                    "icon": "mdi mdi-progress-clock",
+                    "width": 240
+                },
+                "data": {
+                    "intervalMs": 2000
+                }
             }
         ]
     },
@@ -93,6 +114,14 @@
             "Codex": {
                 "Title": "Codex Usage",
                 "Tip": "Remaining Codex CLI quota, read from local session logs. Click to refresh."
+            },
+            "CodexStatus": {
+                "Title": "Codex Status",
+                "Tip": "Codex CLI activity with model, reasoning effort, and sandbox from local session logs."
+            },
+            "CodexSession": {
+                "Title": "Codex Session",
+                "Tip": "Current Codex project, model, effort, branch, and sandbox from local session logs."
             },
             "Config": {
                 "Interval": "Refresh interval (seconds)",
@@ -119,6 +148,14 @@
             "Codex": {
                 "Title": "Codex 使用量",
                 "Tip": "Codex CLI の残りクォータ。ローカルのセッションログから読み取ります。クリックで更新します。"
+            },
+            "CodexStatus": {
+                "Title": "Codex ステータス",
+                "Tip": "Codex CLI の処理状態、モデル、推論強度、サンドボックスをローカルログから表示します。"
+            },
+            "CodexSession": {
+                "Title": "Codex セッション",
+                "Tip": "ローカルセッションログからプロジェクト、モデル、推論強度、ブランチ、サンドボックスを表示します。"
             },
             "Config": {
                 "Interval": "更新間隔（秒）",

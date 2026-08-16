@@ -9,6 +9,7 @@ A FlexDesigner plugin that keeps your **remaining Claude Code and Codex CLI quot
 
 - **Claude key** — shows remaining 5-hour session quota prominently, with weekly quota and extra usage credits as secondary meters
 - **Codex key** — shows remaining primary rate-limit quota, with context window usage as a secondary meter
+- **Codex Status key** — shows explicit CLI turn lifecycle (`WORKING`, `COMPLETE`, `ABORTED`), safe activity categories such as `TESTING`, `EDITING`, and `SEARCHING`, plus compact model/effort/sandbox metadata
 - Color shifts with remaining quota (green → yellow → orange → red). **Numbers are always shown, never color alone**
 - **Click a key to refresh it immediately**
 - Time until reset is shown in the top-right corner
@@ -32,7 +33,9 @@ This plugin reads remaining Claude quota from `https://api.anthropic.com/api/oau
 
 **Why there's no other way:** `~/.claude/projects/**/*.jsonl` only records tokens **consumed**, with no information about rate-limit windows or reset times. There is no other way to learn the actual **remaining** quota.
 
-**The Codex side, by contrast, only reads local files** — no authentication or network access required.
+**The Codex side, by contrast, only reads local files** — no authentication or network access required. Status and session metadata come from Codex's internal rollout JSONL format, so these two keys may need updates when Codex changes that format. A quiet log is never reported as "waiting for input" because local logs cannot establish that state reliably.
+
+The Status key follows the most recently modified local rollout across Codex surfaces. It never shows the full directory path and always uses the parent of `cwd` as the project name. The project name is rendered in white so it remains distinct from the muted `CODEX` label.
 
 ### How tokens are handled
 
@@ -121,6 +124,7 @@ src/
     claude.js             OAuth usage endpoint (needs auth + network)
     claudeAuth.js          OAuth token refresh / re-login (Plan A/B), credential read/write
     codex.js                Reads rollout JSONL under ~/.codex/sessions
+    codexActivity.js        Derives local turn status and session metadata from rollout JSONL
 com.arishow.aitokens.plugin/
   manifest.json          Key definitions, i18n resources (en / ja)
   ui/*.vue               Settings page (Vue 3 + Vuetify 3)
