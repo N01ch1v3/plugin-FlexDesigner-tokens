@@ -102,6 +102,65 @@ function compactDuration(ms) {
   return `${seconds}s`;
 }
 
+function drawCodexStatusIcon(ctx, state, right, centerY, runnerFrame = 0) {
+  if (state === "complete") {
+    const radius = 7.5;
+    const cx = right - radius;
+    ctx.beginPath();
+    ctx.arc(cx, centerY, radius, 0, Math.PI * 2);
+    ctx.fillStyle = STATUS.good;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(cx - 4, centerY);
+    ctx.lineTo(cx - 1, centerY + 3);
+    ctx.lineTo(cx + 5, centerY - 4);
+    ctx.strokeStyle = INK.primary;
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.stroke();
+    return true;
+  }
+
+  if (state === "working") {
+    const cx = right - 9;
+    const poses = [
+      { bob: 0, armFront: 6, armBack: -5, legFront: 7, legBack: -7 },
+      { bob: 1, armFront: 2, armBack: -2, legFront: 3, legBack: -3 },
+      { bob: 0, armFront: -5, armBack: 6, legFront: -7, legBack: 7 },
+      { bob: -1, armFront: -2, armBack: 2, legFront: -3, legBack: 3 }
+    ];
+    const pose = poses[Math.abs(runnerFrame) % poses.length];
+    const cy = centerY + pose.bob;
+    ctx.strokeStyle = STATUS.active;
+    ctx.fillStyle = STATUS.active;
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    // Head and forward-leaning limbs form a compact running-person glyph.
+    ctx.beginPath();
+    ctx.arc(cx + 2, cy - 7, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - 3);
+    ctx.lineTo(cx - 3, cy + 2);
+    ctx.lineTo(cx + 2, cy + 5);
+    ctx.moveTo(cx - 1, cy - 1);
+    ctx.lineTo(cx + pose.armBack, cy + 1);
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + pose.armFront, cy + 1);
+    ctx.moveTo(cx - 3, cy + 2);
+    ctx.lineTo(cx + pose.legBack, cy + 7);
+    ctx.moveTo(cx + 2, cy + 5);
+    ctx.lineTo(cx + pose.legFront, cy + 7);
+    ctx.stroke();
+    return true;
+  }
+
+  return false;
+}
+
 /**
  * Shared card layout.
  *
@@ -233,6 +292,10 @@ function renderCodex(data, opts = {}) {
 function renderCodexStatus(data, opts = {}) {
   const width = opts.width || DEFAULT_WIDTH;
   const { canvas, ctx } = newCanvas(width);
+  // During completion flashing, hide the entire label while preserving the
+  // key's background so the physical Flexbar does not show stale pixels.
+  if (opts.labelVisible === false) return canvas.toDataURL("image/png");
+
   const pad = 8;
   const status = data.status || {};
   const session = data.session || {};
@@ -261,10 +324,16 @@ function renderCodexStatus(data, opts = {}) {
     ctx.fillText(elapsed, width - pad, pad);
   }
 
+  const hasStatusIcon = state === "working" || state === "complete";
   ctx.textAlign = "left";
   ctx.font = "700 20px sans-serif";
   ctx.fillStyle = color;
-  ctx.fillText(fitText(ctx, status.action || state.toUpperCase(), width - pad * 2), pad, 22);
+  ctx.fillText(
+    fitText(ctx, status.action || state.toUpperCase(), width - pad * 2 - (hasStatusIcon ? 24 : 0)),
+    pad,
+    22
+  );
+  drawCodexStatusIcon(ctx, state, width - pad, 32, opts.runnerFrame);
 
   const sandbox =
     session.sandbox === "workspace-write"

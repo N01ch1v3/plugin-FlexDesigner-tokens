@@ -12,6 +12,12 @@ const codexProvider = require("./providers/codex");
 const codexActivityProvider = require("./providers/codexActivity");
 const claudeAuth = require("./providers/claudeAuth");
 const { renderClaude, renderCodex, renderCodexStatus, renderCodexSession, renderError } = require("./render");
+const {
+  shouldFlashComplete,
+  COMPLETE_FLASH_DURATION_MS,
+  COMPLETE_FLASH_INTERVAL_MS,
+  THINKING_RUN_INTERVAL_MS
+} = require("./statusFlash");
 
 const CID = {
   claude: "com.arishow.aitokens.claude",
@@ -140,6 +146,68 @@ function safeDraw(serialNumber, key, format, data) {
   });
 }
 
+/** Redraws the entire status label every 500ms, then leaves it steadily visible. */
+function startCompleteFlash(uid, state) {
+  clearTimeout(state.flashTimer);
+  state.flashUntil = Date.now() + COMPLETE_FLASH_DURATION_MS;
+  state.labelVisible = true;
+
+  const tick = () => {
+    if (keys.get(uid) !== state || !state.lastData) return;
+
+    if (Date.now() >= state.flashUntil) {
+      state.flashTimer = null;
+      state.flashUntil = null;
+      state.labelVisible = true;
+    } else {
+      state.labelVisible = !state.labelVisible;
+      state.flashTimer = setTimeout(tick, COMPLETE_FLASH_INTERVAL_MS);
+    }
+
+    const width = state.key.style?.width || undefined;
+    safeDraw(
+      state.serialNumber,
+      state.key,
+      "base64",
+      renderCodexStatus(state.lastData, { width, labelVisible: state.labelVisible })
+    );
+  };
+
+  state.flashTimer = setTimeout(tick, COMPLETE_FLASH_INTERVAL_MS);
+}
+
+function stopThinkingRun(state) {
+  clearTimeout(state.runTimer);
+  state.runTimer = null;
+  state.runnerFrame = 0;
+}
+
+/** Animates the running-person glyph while Codex is actively thinking. */
+function startThinkingRun(uid, state) {
+  if (state.runTimer) return;
+
+  const tick = () => {
+    if (keys.get(uid) !== state || !state.lastData) return;
+    const status = state.lastData.status || {};
+    if (status.state !== "working" || status.action !== "THINKING") {
+      stopThinkingRun(state);
+      return;
+    }
+
+    state.runnerFrame = (state.runnerFrame + 1) % 4;
+    const width = state.key.style?.width || undefined;
+    safeDraw(
+      state.serialNumber,
+      state.key,
+      "base64",
+      renderCodexStatus(state.lastData, { width, runnerFrame: state.runnerFrame })
+    );
+    state.runTimer = setTimeout(tick, THINKING_RUN_INTERVAL_MS);
+  };
+
+  state.runTimer = setTimeout(tick, THINKING_RUN_INTERVAL_MS);
+}
+
 /** Draws whatever the current state warrants, then schedules the next refresh. */
 async function refresh(uid, { force = false } = {}) {
   const state = keys.get(uid);
@@ -157,10 +225,17 @@ async function refresh(uid, { force = false } = {}) {
   try {
     const data = await getProviderData(provider, { force });
     if (keys.get(uid) !== state || state.refreshSeq !== refreshSeq) return;
+    const previousStatus = state.lastData?.status;
     state.lastData = data;
     state.failures = 0;
 
-    safeDraw(serialNumber, key, "base64", renderFor(cid, data, { width }));
+    const flashComplete = cid === CID.codexStatus && shouldFlashComplete(previousStatus, data.status);
+    const isThinking = cid === CID.codexStatus && data.status?.state === "working" && data.status?.action === "THINKING";
+    if (isThinking) startThinkingRun(uid, state);
+    else stopThinkingRun(state);
+    if (flashComplete) startCompleteFlash(uid, state);
+    const labelVisible = state.flashUntil ? state.labelVisible : true;
+    safeDraw(serialNumber, key, "base64", renderFor(cid, data, { width, labelVisible, runnerFrame: state.runnerFrame }));
   } catch (err) {
     if (keys.get(uid) !== state || state.refreshSeq !== refreshSeq) return;
     state.failures = (state.failures || 0) + 1;
@@ -201,6 +276,8 @@ plugin.on("plugin.alive", (payload) => {
 
     const existing = keys.get(key.uid);
     clearTimeout(existing?.timer);
+    clearTimeout(existing?.flashTimer);
+    clearTimeout(existing?.runTimer);
 
     keys.set(key.uid, {
       serialNumber,
@@ -209,7 +286,12 @@ plugin.on("plugin.alive", (payload) => {
       lastData: existing?.lastData || null,
       refreshSeq: existing?.refreshSeq || 0,
       intervalMs: key.data?.intervalMs || null,
-      timer: null
+      timer: null,
+      flashTimer: null,
+      flashUntil: null,
+      labelVisible: true,
+      runTimer: null,
+      runnerFrame: 0
     });
 
     refresh(key.uid, { force: true });
@@ -239,6 +321,8 @@ plugin.on("plugin.dead", (payload) => {
     const state = keys.get(key.uid);
     if (!state) return;
     clearTimeout(state.timer);
+    clearTimeout(state.flashTimer);
+    clearTimeout(state.runTimer);
     keys.delete(key.uid);
   });
 });
